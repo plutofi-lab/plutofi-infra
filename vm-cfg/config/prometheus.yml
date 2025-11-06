@@ -1,0 +1,6 @@
+# Configuration for scraping metrics from different targets
+scrape_configs:
+  - job_name: "api-prod"
+    static_configs:
+      - targets: ["api-prod:8081"]
+    metrics_path: "/metrics"

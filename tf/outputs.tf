@@ -88,3 +88,53 @@ output "db_databases_map" {
   description = "Map of created databases with their details"
   value       = module.postgres_db.databases
 }
+
+# Database URL Outputs (Public)
+output "db_url_prod" {
+  description = "PostgreSQL connection URL for plutofi_prod database (public)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.host}:${module.postgres_db.port}/plutofi_prod"
+  sensitive   = true
+}
+
+output "db_url_analytics" {
+  description = "PostgreSQL connection URL for plutofi_analytics database (public)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.host}:${module.postgres_db.port}/plutofi_analytics"
+  sensitive   = true
+}
+
+output "db_url_staging" {
+  description = "PostgreSQL connection URL for plutofi_staging database (public)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.host}:${module.postgres_db.port}/plutofi_staging"
+  sensitive   = true
+}
+
+output "db_url_dev" {
+  description = "PostgreSQL connection URL for plutofi_dev database (public)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.host}:${module.postgres_db.port}/plutofi_dev"
+  sensitive   = true
+}
+
+# Database URL Outputs (Private)
+output "db_url_prod_private" {
+  description = "PostgreSQL connection URL for plutofi_prod database (private network)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.private_host}:${module.postgres_db.port}/plutofi_prod"
+  sensitive   = true
+}
+
+output "db_url_analytics_private" {
+  description = "PostgreSQL connection URL for plutofi_analytics database (private network)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.private_host}:${module.postgres_db.port}/plutofi_analytics"
+  sensitive   = true
+}
+
+output "db_url_staging_private" {
+  description = "PostgreSQL connection URL for plutofi_staging database (private network)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.private_host}:${module.postgres_db.port}/plutofi_staging"
+  sensitive   = true
+}
+
+output "db_url_dev_private" {
+  description = "PostgreSQL connection URL for plutofi_dev database (private network)"
+  value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.private_host}:${module.postgres_db.port}/plutofi_dev"
+  sensitive   = true
+}

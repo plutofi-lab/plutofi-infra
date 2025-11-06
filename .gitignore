@@ -1,3 +1,4 @@
 .terraform/
+.env
 .env.sh
 envs.auto.tfvars

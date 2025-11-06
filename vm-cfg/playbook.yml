@@ -1,0 +1,305 @@
+---
+- name: Setup Ubuntu VM and Deploy Services
+  hosts: all
+  become: true
+  vars:
+    compose_dir: /opt/app
+    docker_compose_version: "2.24.1"
+    github_registry: "ghcr.io"
+    github_username: "{{ lookup('ini', 'GITHUB_USERNAME type=properties file=.env') }}"
+    github_token: "{{ lookup('ini', 'GITHUB_TOKEN type=properties file=.env') }}"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install required system packages
+      ansible.builtin.apt:
+        pkg:
+          - apt-transport-https
+          - ca-certificates
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+          - gnupg
+          - logrotate
+        state: present
+
+    # Configure log rotation to prevent disk space issues
+    - name: Configure logrotate for Docker logs
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/docker-logs
+        content: |
+          /var/lib/docker/containers/*/*.log {
+              daily
+              rotate 2
+              compress
+              delaycompress
+              missingok
+              notifempty
+              copytruncate
+              maxsize 50M
+          }
+        mode: "0644"
+
+    # Modify existing syslog logrotate to add size limits
+    - name: Update syslog logrotate configuration
+      ansible.builtin.lineinfile:
+        path: /etc/logrotate.d/rsyslog
+        insertafter: "notifempty"
+        line: "    maxsize 50M"
+        backup: true
+
+    - name: Update alternatives log logrotate configuration
+      ansible.builtin.lineinfile:
+        path: /etc/logrotate.d/dpkg
+        insertafter: "notifempty"
+        line: "    maxsize 20M"
+        backup: true
+
+    # Limit systemd journal size
+    - name: Configure systemd journal limits
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf
+        content: |
+          [Journal]
+          SystemMaxUse=200M
+          SystemMaxFileSize=50M
+          MaxRetentionSec=3days
+          MaxFileSec=1day
+          Storage=persistent
+        mode: "0644"
+        backup: true
+      notify: Restart journald
+
+    # Install Docker and Compose before configuring daemon.json
+    - name: Install Docker
+      ansible.builtin.apt:
+        pkg:
+          - docker.io
+          - containerd
+        state: present
+
+    - name: Create Docker CLI plugins directory
+      ansible.builtin.file:
+        path: /usr/lib/docker/cli-plugins
+        state: directory
+        mode: "0755"
+
+    - name: Install Docker Compose plugin
+      ansible.builtin.get_url:
+        url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-x86_64"
+        dest: /usr/lib/docker/cli-plugins/docker-compose
+        mode: "0755"
+
+    - name: Create daily log cleanup cron job
+      ansible.builtin.cron:
+        name: "daily-log-cleanup"
+        minute: "0"
+        hour: "2"
+        job: "journalctl --vacuum-size=10M && docker system prune -f --filter 'until=12h'"
+        user: root
+
+    # Configure Docker with log limits
+    - name: Configure Docker daemon with log rotation
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            }
+          }
+        mode: "0644"
+      notify: Restart docker
+
+    # Simple rsyslog configuration to prevent stalls
+    - name: Configure rsyslog to prevent stalls
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/99-prevent-stall.conf
+        content: |
+          # Prevent rsyslog stalls
+          $WorkDirectory /var/spool/rsyslog
+          $ActionQueueFileName queue
+          $ActionQueueMaxDiskSpace 10m
+          $ActionQueueSaveOnShutdown on
+          $ActionResumeRetryCount 3
+          $ActionResumeInterval 10
+        mode: "0644"
+      notify: Restart rsyslog
+
+    - name: Create rsyslog work directory
+      ansible.builtin.file:
+        path: /var/spool/rsyslog
+        state: directory
+        owner: syslog
+        group: adm
+        mode: "0755"
+
+    # Clean up existing large logs before proceeding
+    - name: Clean up existing journal logs
+      ansible.builtin.command: journalctl --vacuum-size=10M
+      changed_when: false
+
+    - name: Test logrotate configuration
+      ansible.builtin.command: logrotate -d /etc/logrotate.conf
+      changed_when: false
+      failed_when: false
+
+    - name: Start Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create compose directory
+      ansible.builtin.file:
+        path: "{{ compose_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy docker-compose file
+      ansible.builtin.copy:
+        src: ./compose.yml
+        dest: "{{ compose_dir }}/compose.yml"
+        mode: "0644"
+
+    - name: Copy .env file
+      ansible.builtin.copy:
+        src: ./.env
+        dest: "{{ compose_dir }}/.env"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Create traefik data directory
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/traefik-data"
+        state: directory
+        mode: "0755"
+
+    - name: Create acme.json file
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/traefik-data/acme.json"
+        state: touch
+        mode: "0600"
+
+    - name: Create watcher directory for Docker credentials
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/watcher"
+        state: directory
+        mode: "0755"
+
+    - name: Login to GitHub Container Registry
+      ansible.builtin.command: docker login {{ github_registry }} -u {{ github_username }} -p {{ github_token }}
+      changed_when: false
+      no_log: true
+
+    - name: Generate Docker config.json for Watchtower
+      ansible.builtin.shell: |
+        set -o pipefail
+        echo '{
+          "auths": {
+            "{{ github_registry }}": {
+              "auth": "'$(echo -n "{{ github_username }}:{{ github_token }}" | base64 -w0)'"
+            }
+          }
+        }' > "{{ compose_dir }}/watcher/config.json"
+      args:
+        executable: /bin/bash
+      changed_when: true
+      no_log: true
+
+    - name: Set proper permissions for config.json
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/watcher/config.json"
+        mode: "0600"
+
+    - name: Create config directories
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/config/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "grafana/datasources"
+        - "grafana/dashboards"
+
+    - name: Copy Grafana datasources config
+      ansible.builtin.copy:
+        src: ./config/grafana/datasources/datasources.yaml
+        dest: "{{ compose_dir }}/config/grafana/datasources/datasources.yaml"
+        mode: "0644"
+
+    - name: Copy Prometheus config file
+      ansible.builtin.copy:
+        src: ./config/prometheus.yml
+        dest: "{{ compose_dir }}/config/prometheus.yml"
+        mode: "0644"
+
+    - name: Copy Tempo config file
+      ansible.builtin.copy:
+        src: ./config/tempo.yaml
+        dest: "{{ compose_dir }}/config/tempo.yaml"
+        mode: "0644"
+
+    - name: Configure UFW rules
+      ansible.builtin.command: "ufw allow {{ item }}/tcp"
+      loop:
+        - "22"
+        - "80"
+        - "443"
+        - "8080"
+      changed_when: false
+
+    - name: Set UFW default policy
+      ansible.builtin.command: ufw default deny
+      changed_when: false
+
+    - name: Enable UFW
+      ansible.builtin.command: ufw --force enable
+      changed_when: false
+
+    - name: Add current user to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Start Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Pull and start services with docker-compose
+      ansible.builtin.command: docker compose -f {{ compose_dir }}/compose.yml --env-file {{ compose_dir }}/.env up -d --pull always # --force-recreate
+      args:
+        chdir: "{{ compose_dir }}"
+      changed_when: false
+
+    - name: Remove .env file after services are started
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/.env"
+        state: absent
+      changed_when: false
+
+  handlers:
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+
+    - name: Restart rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted
+
+    - name: Restart docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted

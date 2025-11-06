@@ -1,0 +1,226 @@
+version: "3"
+
+# x-smtp: &smtp
+#   SMTP_HOST: ${SMTP_HOST}
+#   SMTP_PORT: ${SMTP_PORT}
+#   SMTP_USER: ${SMTP_USER}
+#   SMTP_PASSWORD: ${SMTP_PASSWORD}
+#   SMTP_FROM: ${SMTP_FROM}
+#   SMTP_FROM_NAME: ${SMTP_FROM_NAME}
+
+x-observability: &observability
+  SERVICE_NAME: ${SERVICE_NAME}
+  LOKI_URL: ${LOKI_URL}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik-data/acme.json:/acme.json
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.api-resolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.api-resolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.api-resolver.acme.email=9r1nc3w1ll@gmail.com"
+      - "--certificatesresolvers.api-resolver.acme.storage=/acme.json"
+
+    networks:
+      - proxy
+
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./watcher/config.json:/config.json
+    command: --interval 30 --cleanup --rolling-restart
+    networks:
+      - proxy
+
+  # loki:
+  #   container_name: loki
+  #   image: grafana/loki:2.9.2
+  #   ports:
+  #     - "3100:3100"
+  #   command: -config.file=/etc/loki/local-config.yaml
+  #   volumes:
+  #     - loki-data:/loki
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "0.5"
+  #         memory: 512M
+  #   networks:
+  #     - proxy
+
+  # tempo:
+  #   container_name: tempo
+  #   image: grafana/tempo:2.3.1
+  #   command: -config.file=/etc/tempo.yaml
+  #   volumes:
+  #     - ./config/tempo.yaml:/etc/tempo.yaml
+  #     - tempo-data:/tmp/tempo
+  #   ports:
+  #     - "3200:3200" # tempo
+  #     - "4317:4317" # otlp grpc
+  #     - "4318:4318" # otlp http
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "0.5"
+  #         memory: 512M
+  #   networks:
+  #     - proxy
+
+  # prometheus:
+  #   container_name: prometheus
+  #   image: prom/prometheus:latest
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus-data:/prometheus
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "0.5"
+  #         memory: 512M
+  #   networks:
+  #     - proxy
+
+  # grafana:
+  #   container_name: grafana
+  #   image: grafana/grafana:10.2.2
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3500:3000"
+  #   environment:
+  #     GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+  #     GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+  #     GF_USERS_ALLOW_SIGN_UP: false
+  #   volumes:
+  #     - ./config/grafana/datasources:/etc/grafana/provisioning/datasources
+  #     - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards
+  #     - grafana-data:/var/lib/grafana
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "0.5"
+  #         memory: 512M
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.grafana-http.rule=Host(`grafana.plutofi-api.com`)"
+  #     - "traefik.http.routers.grafana-http.entrypoints=web"
+  #     - "traefik.http.middlewares.redirecthttps.redirectscheme.scheme=https"
+  #     - "traefik.http.middlewares.redirecthttps.redirectscheme.permanent=true"
+  #     - "traefik.http.routers.grafana-http.middlewares=redirecthttps@docker"
+  #     - "traefik.http.routers.grafana-https.rule=Host(`grafana.plutofi-api.com`)"
+  #     - "traefik.http.routers.grafana-https.entrypoints=websecure"
+  #     - "traefik.http.routers.grafana-https.tls.certresolver=grafana-resolver"
+  #     - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+  #   networks:
+  #     - proxy
+  
+  valkey:
+    image: valkey/valkey:7.2
+    container_name: valkey
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - valkey-data:/data
+    networks:
+      - proxy
+
+  api-dev:
+    image: ghcr.io/plutofi-lab/backend:feat-v2
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 20s
+      rollback_config:
+        parallelism: 1
+        delay: 20s
+    environment:
+      <<: [*observability]
+      NODE_ENV: development
+      SERVICE_NAME: api-dev
+      APP_DEBUG: true
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: cookie
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: valkey
+      DATABASE_URL: ${DEV_DATABASE_URL}
+      APP_KEY: ${DEV_APP_KEY}
+      APP_URL: ${DEV_APP_URL}
+      JWT_SECRET: ${DEV_JWT_SECRET}
+      REDIS_PASSWORD: ${DEV_REDIS_PASSWORD:-null}
+      REDIS_PORT: ${DEV_REDIS_PORT:-6379}
+      REDIS_DB: ${DEV_REDIS_DB:-0}
+
+    volumes:
+      - api-dev-logs:/var/www/html/storage/logs
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api-dev-http.rule=Host(`${DEV_DOMAIN_NAME}`)"
+      - "traefik.http.routers.api-dev-http.entrypoints=web"
+      - "traefik.http.middlewares.api-dev-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.api-dev-redirect.redirectscheme.permanent=true"
+      - "traefik.http.routers.api-dev-http.middlewares=api-dev-redirect@docker"
+      - "traefik.http.routers.api-dev-https.rule=Host(`${DEV_DOMAIN_NAME}`)"
+      - "traefik.http.routers.api-dev-https.entrypoints=websecure"
+      - "traefik.http.routers.api-dev-https.tls=true"
+      - "traefik.http.routers.api-dev-https.tls.certresolver=api-resolver"
+      - "traefik.http.services.api-dev.loadbalancer.server.port=80"
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - proxy
+
+volumes:
+  # loki-data:
+  # tempo-data:
+  # grafana-data:
+  # prometheus-data:
+  valkey-data:
+  api-dev-logs:
+
+networks:
+  proxy:
+    driver: bridge

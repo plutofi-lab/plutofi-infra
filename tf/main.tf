@@ -79,14 +79,14 @@ module "postgres_db" {
 
   name                 = "plutofi-db"
   engine               = "pg"
-  engine_version       = "16"
+  engine_version       = "18"
   size                 = "db-s-1vcpu-1gb"
   region               = "nyc1"
   node_count           = 1
   private_network_uuid = module.vpc.id
   tags                 = ["database", "production"]
 
-  database_names = ["plutofi_main", "plutofi_analytics"]
+  database_names = ["plutofi_prod", "plutofi_analytics", "plutofi_staging", "plutofi_dev"]
 
   maintenance_window = {
     day  = "sunday"
