@@ -1,0 +1,2 @@
+#!bash
+source ./.env.sh
