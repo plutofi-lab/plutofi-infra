@@ -195,6 +195,18 @@
         state: directory
         mode: "0755"
 
+    - name: Create log directories for services
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/logs/{{ item }}"
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+      loop:
+        - "api-dev"
+        - "api-qa"
+        - "api-prod"
+
     - name: Login to GitHub Container Registry
       ansible.builtin.command: docker login {{ github_registry }} -u {{ github_username }} -p {{ github_token }}
       changed_when: false
@@ -277,7 +289,7 @@
         enabled: true
 
     - name: Pull and start services with docker-compose
-      ansible.builtin.command: docker compose -f {{ compose_dir }}/compose.yml --env-file {{ compose_dir }}/.env up -d --pull always # --force-recreate
+      ansible.builtin.command: docker compose -f {{ compose_dir }}/compose.yml --env-file {{ compose_dir }}/.env up -d --pull always  --force-recreate
       args:
         chdir: "{{ compose_dir }}"
       changed_when: false

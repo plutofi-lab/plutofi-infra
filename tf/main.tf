@@ -79,7 +79,7 @@ module "postgres_db" {
 
   name                 = "plutofi-db"
   engine               = "pg"
-  engine_version       = "18"
+  engine_version       = "16"
   size                 = "db-s-1vcpu-1gb"
   region               = "nyc1"
   node_count           = 1
@@ -92,4 +92,16 @@ module "postgres_db" {
     day  = "sunday"
     hour = "02:00"
   }
+}
+
+# PgBouncer Connection Pools
+resource "digitalocean_database_connection_pool" "pools" {
+  for_each = toset(module.postgres_db.database_names)
+
+  cluster_id = module.postgres_db.id
+  name       = "${each.value}-pool"
+  mode       = "transaction"
+  size       = each.value == "plutofi_prod" ? 3 : 1
+  db_name    = each.value
+  user       = module.postgres_db.user
 }

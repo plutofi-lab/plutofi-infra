@@ -138,3 +138,64 @@ output "db_url_dev_private" {
   value       = "postgresql://${module.postgres_db.user}:${module.postgres_db.password}@${module.postgres_db.private_host}:${module.postgres_db.port}/plutofi_dev"
   sensitive   = true
 }
+
+# PgBouncer Connection Pool Outputs
+output "db_connection_pools" {
+  description = "Map of PgBouncer connection pools with their connection details"
+  value = {
+    for pool_name, pool in digitalocean_database_connection_pool.pools : pool_name => {
+      name        = pool.name
+      host        = pool.host
+      port        = pool.port
+      database    = pool.db_name
+      user        = pool.user
+      password    = pool.password
+      uri         = pool.uri
+      private_uri = pool.private_uri
+      mode        = pool.mode
+      size        = pool.size
+    }
+  }
+  sensitive = true
+}
+
+output "db_connection_pool_uris" {
+  description = "Map of PgBouncer connection pool URIs by database name"
+  value = {
+    for pool_name, pool in digitalocean_database_connection_pool.pools : pool_name => pool.uri
+  }
+  sensitive = true
+}
+
+output "db_connection_pool_private_uris" {
+  description = "Map of PgBouncer connection pool private URIs by database name"
+  value = {
+    for pool_name, pool in digitalocean_database_connection_pool.pools : pool_name => pool.private_uri
+  }
+  sensitive = true
+}
+
+# Individual PgBouncer Connection Pool Private Connection Strings
+output "db_pool_prod_private" {
+  description = "PgBouncer connection pool private URI for plutofi_prod database"
+  value       = digitalocean_database_connection_pool.pools["plutofi_prod"].private_uri
+  sensitive   = true
+}
+
+output "db_pool_analytics_private" {
+  description = "PgBouncer connection pool private URI for plutofi_analytics database"
+  value       = digitalocean_database_connection_pool.pools["plutofi_analytics"].private_uri
+  sensitive   = true
+}
+
+output "db_pool_staging_private" {
+  description = "PgBouncer connection pool private URI for plutofi_staging database"
+  value       = digitalocean_database_connection_pool.pools["plutofi_staging"].private_uri
+  sensitive   = true
+}
+
+output "db_pool_dev_private" {
+  description = "PgBouncer connection pool private URI for plutofi_dev database"
+  value       = digitalocean_database_connection_pool.pools["plutofi_dev"].private_uri
+  sensitive   = true
+}
