@@ -23,8 +23,8 @@ x-redis: &redis
   REDIS_PORT: ${REDIS_PORT}
 
 x-paystack: &paystack
-  PAYSTACK_SECRET_KEY: ${PAYSTACK_TEST_SECRET_KEY}
   PAYSTACK_PUBLIC_KEY: ${PAYSTACK_TEST_PUBLIC_KEY}
+  PAYSTACK_SECRET_KEY: ${PAYSTACK_TEST_SECRET_KEY}
   PAYSTACK_CALLBACK_URL: 
 
 x-observability: &observability
@@ -324,6 +324,8 @@ services:
         JWT_SECRET: ${PROD_JWT_SECRET}
         REDIS_DB: 0
         PAYSTACK_CALLBACK_URL: "${PROD_APP_URL}/api/wb"
+        PAYSTACK_PUBLIC_KEY: "${PAYSTACK_LIVE_PUBLIC_KEY}"
+        PAYSTACK_SECRET_KEY: "${PAYSTACK_LIVE_SECRET_KEY}"
       volumes:
         - /opt/app/logs/api-prod:/var/www/html/storage/logs
       labels:
