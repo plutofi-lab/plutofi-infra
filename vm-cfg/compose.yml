@@ -23,8 +23,8 @@ x-redis: &redis
   REDIS_PORT: ${REDIS_PORT}
 
 x-paystack: &paystack
-  PAYSTACK_PUBLIC_KEY: ${PAYSTACK_TEST_PUBLIC_KEY}
   PAYSTACK_SECRET_KEY: ${PAYSTACK_TEST_SECRET_KEY}
+  PAYSTACK_PUBLIC_KEY: ${PAYSTACK_TEST_PUBLIC_KEY}
   PAYSTACK_CALLBACK_URL: 
 
 x-observability: &observability
@@ -32,6 +32,9 @@ x-observability: &observability
   LOKI_URL: ${LOKI_URL}
   LOG_LEVEL: ${LOG_LEVEL:-info}
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+
+x-firebase: &firebase
+  FIREBASE_CREDENTIALS_PATH: ./keys/sa.json
 
 services:
   traefik:
@@ -197,7 +200,7 @@ services:
         parallelism: 1
         delay: 20s
     environment:
-      <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack]
+      <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack, *firebase]
       NODE_ENV: development
       SERVICE_NAME: api-dev
       APP_DEBUG: true
@@ -212,7 +215,7 @@ services:
       PAYSTACK_CALLBACK_URL: "${DEV_APP_URL}/api/wb"
       REDIS_DB: 2
     volumes:
-      - /opt/app/logs/api-dev:/var/www/html/storage/logs
+      - api-dev-logs:/var/www/html/storage/logs
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api-dev-http.rule=Host(`${DEV_DOMAIN_NAME}`)"
@@ -230,7 +233,7 @@ services:
       - proxy
 
 
-  api-qa:
+  api-staging:
     image: ghcr.io/plutofi-lab/backend:main
     restart: unless-stopped
     depends_on:
@@ -255,9 +258,9 @@ services:
         parallelism: 1
         delay: 20s
     environment:
-      <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack]
+      <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack, *firebase]
       NODE_ENV: development
-      SERVICE_NAME: api-qa
+      SERVICE_NAME: api-staging
       APP_DEBUG: true
       CACHE_DRIVER: redis
       SESSION_DRIVER: cookie
@@ -269,7 +272,7 @@ services:
       REDIS_DB: 1
       PAYSTACK_CALLBACK_URL: "${STAGING_APP_URL}/api/wb"
     volumes:
-      - /opt/app/logs/api-qa:/var/www/html/storage/logs
+      - api-staging-logs:/var/www/html/storage/logs
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api-staging-http.rule=Host(`${STAGING_DOMAIN_NAME}`)"
@@ -279,6 +282,7 @@ services:
       - "traefik.http.routers.api-staging-http.middlewares=api-staging-redirect@docker"
       - "traefik.http.routers.api-staging-https.rule=Host(`${STAGING_DOMAIN_NAME}`)"
       - "traefik.http.routers.api-staging-https.entrypoints=websecure"
+      - "traefik.http.routers.api-staging-https.priority=10"
       - "traefik.http.routers.api-staging-https.tls=true"
       - "traefik.http.routers.api-staging-https.tls.certresolver=api-resolver"
       - "traefik.http.services.api-staging.loadbalancer.server.port=80"
@@ -311,7 +315,7 @@ services:
           parallelism: 1
           delay: 20s
       environment:
-        <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack]
+        <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack, *firebase]
         NODE_ENV: development
         SERVICE_NAME: api-prod
         APP_DEBUG: true
@@ -324,10 +328,8 @@ services:
         JWT_SECRET: ${PROD_JWT_SECRET}
         REDIS_DB: 0
         PAYSTACK_CALLBACK_URL: "${PROD_APP_URL}/api/wb"
-        PAYSTACK_PUBLIC_KEY: "${PAYSTACK_LIVE_PUBLIC_KEY}"
-        PAYSTACK_SECRET_KEY: "${PAYSTACK_LIVE_SECRET_KEY}"
       volumes:
-        - /opt/app/logs/api-prod:/var/www/html/storage/logs
+        - api-prod-logs:/var/www/html/storage/logs
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.api-prod-http.rule=Host(`${PROD_DOMAIN_NAME}`)"
@@ -337,7 +339,7 @@ services:
         - "traefik.http.routers.api-prod-http.middlewares=api-prod-redirect@docker"
         - "traefik.http.routers.api-prod-https.rule=Host(`${PROD_DOMAIN_NAME}`)"
         - "traefik.http.routers.api-prod-https.entrypoints=websecure"
-        - "traefik.http.routers.api-staging-https.tls=true"
+        - "traefik.http.routers.api-prod-https.tls=true"
         - "traefik.http.routers.api-prod-https.tls.certresolver=api-resolver"
         - "traefik.http.services.api-prod.loadbalancer.server.port=80"
         - "com.centurylinklabs.watchtower.enable=true"
@@ -351,6 +353,9 @@ volumes:
   # grafana-data:
   # prometheus-data:
   valkey-data:
+  api-dev-logs:
+  api-staging-logs:
+  api-prod-logs:
 
 networks:
   proxy:

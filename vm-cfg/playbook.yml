@@ -259,6 +259,18 @@
         dest: "{{ compose_dir }}/config/tempo.yaml"
         mode: "0644"
 
+    - name: Create keys directory
+      ansible.builtin.file:
+        path: "{{ compose_dir }}/keys"
+        state: directory
+        mode: "0755"
+ 
+    - name: Copy Service account json
+      ansible.builtin.copy:
+        src: ./keys/sa.json
+        dest: "{{ compose_dir }}/keys/sa.json"
+        mode: "0644"
+
     - name: Configure UFW rules
       ansible.builtin.command: "ufw allow {{ item }}/tcp"
       loop:
