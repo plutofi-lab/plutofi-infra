@@ -34,7 +34,7 @@ x-observability: &observability
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
 
 x-firebase: &firebase
-  FIREBASE_CREDENTIALS_PATH: /var/www/html/keys/sa.json
+  FIREBASE_CREDENTIALS_PATH: /keys/sa.json
 
 services:
   traefik:
@@ -216,7 +216,7 @@ services:
       REDIS_DB: 2
     volumes:
       - api-dev-logs:/var/www/html/storage/logs
-      - ./keys:/var/www/html/keys:ro
+      - ./keys:/keys:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api-dev-http.rule=Host(`${DEV_DOMAIN_NAME}`)"
@@ -274,7 +274,7 @@ services:
       PAYSTACK_CALLBACK_URL: "${STAGING_APP_URL}/api/wb"
     volumes:
       - api-staging-logs:/var/www/html/storage/logs
-      - ./keys:/var/www/html/keys:ro
+      - ./keys:/keys:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api-staging-http.rule=Host(`${STAGING_DOMAIN_NAME}`)"
@@ -332,7 +332,7 @@ services:
         PAYSTACK_CALLBACK_URL: "${PROD_APP_URL}/api/wb"
       volumes:
         - api-prod-logs:/var/www/html/storage/logs
-        - ./keys:/var/www/html/keys:ro
+        - ./keys:/keys:ro
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.api-prod-http.rule=Host(`${PROD_DOMAIN_NAME}`)"
