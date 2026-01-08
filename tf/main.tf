@@ -101,7 +101,10 @@ resource "digitalocean_database_connection_pool" "pools" {
   cluster_id = module.postgres_db.id
   name       = "${each.value}-pool"
   mode       = "session"
-  size       = each.value == "plutofi_prod" ? 3 : 2
-  db_name    = each.value
-  user       = module.postgres_db.user
+
+  # Pool sizes: Production 10, Analytics 3, Others (staging/dev) 4
+  # Total: 10 + 3 + 4 + 4 = 21 (within 22 available)
+  size    = each.value == "plutofi_prod" ? 10 : (each.value == "plutofi_analytics" ? 3 : 4)
+  db_name = each.value
+  user    = module.postgres_db.user
 }
