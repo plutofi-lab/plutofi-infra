@@ -25,7 +25,7 @@ x-redis: &redis
 x-paystack: &paystack
   PAYSTACK_SECRET_KEY: ${PAYSTACK_TEST_SECRET_KEY}
   PAYSTACK_PUBLIC_KEY: ${PAYSTACK_TEST_PUBLIC_KEY}
-  PAYSTACK_CALLBACK_URL: 
+  PAYSTACK_CALLBACK_URL:
 
 x-observability: &observability
   SERVICE_NAME: ${SERVICE_NAME}
@@ -159,7 +159,7 @@ services:
   #     - "traefik.http.services.grafana.loadbalancer.server.port=3000"
   #   networks:
   #     - proxy
-  
+
   valkey:
     image: valkey/valkey:7.2
     container_name: valkey
@@ -200,7 +200,17 @@ services:
         parallelism: 1
         delay: 20s
     environment:
-      <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack, *firebase]
+      <<:
+        [
+          *observability,
+          *emails,
+          *resend,
+          *cloudinary,
+          *redis,
+          *ai,
+          *paystack,
+          *firebase,
+        ]
       NODE_ENV: development
       SERVICE_NAME: api-dev
       APP_DEBUG: true
@@ -214,6 +224,7 @@ services:
       JWT_SECRET: ${DEV_JWT_SECRET}
       PAYSTACK_CALLBACK_URL: "${DEV_APP_URL}/api/wb"
       REDIS_DB: 2
+      REDIS_CACHE_DB: 5
     volumes:
       - api-dev-logs:/var/www/html/storage/logs
       - ./keys:/keys:ro
@@ -232,7 +243,6 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     networks:
       - proxy
-
 
   api-staging:
     image: ghcr.io/plutofi-lab/backend:main
@@ -259,7 +269,17 @@ services:
         parallelism: 1
         delay: 20s
     environment:
-      <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack, *firebase]
+      <<:
+        [
+          *observability,
+          *emails,
+          *resend,
+          *cloudinary,
+          *redis,
+          *ai,
+          *paystack,
+          *firebase,
+        ]
       NODE_ENV: development
       SERVICE_NAME: api-staging
       APP_DEBUG: true
@@ -271,6 +291,7 @@ services:
       APP_URL: ${STAGING_APP_URL}
       JWT_SECRET: ${STAGING_JWT_SECRET}
       REDIS_DB: 1
+      REDIS_CACHE_DB: 4
       PAYSTACK_CALLBACK_URL: "${STAGING_APP_URL}/api/wb"
     volumes:
       - api-staging-logs:/var/www/html/storage/logs
@@ -293,62 +314,72 @@ services:
       - proxy
 
   api-prod:
-      image: ghcr.io/plutofi-lab/backend:main
-      restart: unless-stopped
-      depends_on:
-        valkey:
-          condition: service_healthy
-      healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:80/api/ping"]
-        interval: 30s
-        timeout: 10s
-        retries: 3
-        start_period: 30s
-      deploy:
-        resources:
-          limits:
-            memory: 1024M
-        replicas: 1
-        update_config:
-          order: start-first
-          failure_action: rollback
-          delay: 20s
-        rollback_config:
-          parallelism: 1
-          delay: 20s
-      environment:
-        <<: [*observability, *emails, *resend, *cloudinary, *redis, *ai, *paystack, *firebase]
-        NODE_ENV: development
-        SERVICE_NAME: api-prod
-        APP_DEBUG: true
-        CACHE_DRIVER: redis
-        SESSION_DRIVER: cookie
-        QUEUE_CONNECTION: redis
-        DATABASE_URL: ${PROD_DATABASE_URL}
-        APP_KEY: ${PROD_APP_KEY}
-        APP_URL: ${PROD_APP_URL}
-        JWT_SECRET: ${PROD_JWT_SECRET}
-        REDIS_DB: 0
-        PAYSTACK_CALLBACK_URL: "${PROD_APP_URL}/api/wb"
-      volumes:
-        - api-prod-logs:/var/www/html/storage/logs
-        - ./keys:/keys:ro
-      labels:
-        - "traefik.enable=true"
-        - "traefik.http.routers.api-prod-http.rule=Host(`${PROD_DOMAIN_NAME}`)"
-        - "traefik.http.routers.api-prod-http.entrypoints=web"
-        - "traefik.http.middlewares.api-prod-redirect.redirectscheme.scheme=https"
-        - "traefik.http.middlewares.api-prod-redirect.redirectscheme.permanent=true"
-        - "traefik.http.routers.api-prod-http.middlewares=api-prod-redirect@docker"
-        - "traefik.http.routers.api-prod-https.rule=Host(`${PROD_DOMAIN_NAME}`)"
-        - "traefik.http.routers.api-prod-https.entrypoints=websecure"
-        - "traefik.http.routers.api-prod-https.tls=true"
-        - "traefik.http.routers.api-prod-https.tls.certresolver=api-resolver"
-        - "traefik.http.services.api-prod.loadbalancer.server.port=80"
-        - "com.centurylinklabs.watchtower.enable=true"
-      networks:
-        - proxy
-
+    image: ghcr.io/plutofi-lab/backend:main
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        delay: 20s
+      rollback_config:
+        parallelism: 1
+        delay: 20s
+    environment:
+      <<:
+        [
+          *observability,
+          *emails,
+          *resend,
+          *cloudinary,
+          *redis,
+          *ai,
+          *paystack,
+          *firebase,
+        ]
+      NODE_ENV: development
+      SERVICE_NAME: api-prod
+      APP_DEBUG: true
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: cookie
+      QUEUE_CONNECTION: redis
+      DATABASE_URL: ${PROD_DATABASE_URL}
+      APP_KEY: ${PROD_APP_KEY}
+      APP_URL: ${PROD_APP_URL}
+      JWT_SECRET: ${PROD_JWT_SECRET}
+      REDIS_DB: 0
+      REDIS_CACHE_DB: 3
+      PAYSTACK_CALLBACK_URL: "${PROD_APP_URL}/api/wb"
+    volumes:
+      - api-prod-logs:/var/www/html/storage/logs
+      - ./keys:/keys:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api-prod-http.rule=Host(`${PROD_DOMAIN_NAME}`)"
+      - "traefik.http.routers.api-prod-http.entrypoints=web"
+      - "traefik.http.middlewares.api-prod-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.api-prod-redirect.redirectscheme.permanent=true"
+      - "traefik.http.routers.api-prod-http.middlewares=api-prod-redirect@docker"
+      - "traefik.http.routers.api-prod-https.rule=Host(`${PROD_DOMAIN_NAME}`)"
+      - "traefik.http.routers.api-prod-https.entrypoints=websecure"
+      - "traefik.http.routers.api-prod-https.tls=true"
+      - "traefik.http.routers.api-prod-https.tls.certresolver=api-resolver"
+      - "traefik.http.services.api-prod.loadbalancer.server.port=80"
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - proxy
 
 volumes:
   # loki-data:
