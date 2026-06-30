@@ -3,3 +3,4 @@
 .env.sh
 envs.auto.tfvars
 **/keys/*.json
+.DS_Store

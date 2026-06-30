@@ -11,6 +11,10 @@ x-resend: &resend
 
 x-ai: &ai
   OPEN_API_KEY: ${OPEN_API_KEY}
+  OPENAI_CART_MODEL: ${OPENAI_CART_MODEL:-gpt-4.1-mini}
+  OPENAI_CART_REASONING_ENABLED: ${OPENAI_CART_REASONING_ENABLED:-false}
+  OPENAI_CART_REASONING_MODEL: ${OPENAI_CART_REASONING_MODEL:-o4-mini}
+  OPENAI_CART_REASONING_EFFORT: ${OPENAI_CART_REASONING_EFFORT:-low}
 
 x-cloudinary: &cloudinary
   CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
@@ -314,7 +318,7 @@ services:
       - proxy
 
   api-prod:
-    image: ghcr.io/plutofi-lab/backend:main
+    image: ghcr.io/plutofi-lab/backend:v0.2.1
     restart: unless-stopped
     depends_on:
       valkey:
@@ -349,9 +353,9 @@ services:
           *paystack,
           *firebase,
         ]
-      NODE_ENV: development
+      NODE_ENV: production
       SERVICE_NAME: api-prod
-      APP_DEBUG: true
+      APP_DEBUG: false
       CACHE_DRIVER: redis
       SESSION_DRIVER: cookie
       QUEUE_CONNECTION: redis
@@ -362,6 +366,8 @@ services:
       REDIS_DB: 0
       REDIS_CACHE_DB: 3
       PAYSTACK_CALLBACK_URL: "${PROD_APP_URL}/api/wb"
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_LIVE_SECRET_KEY}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_LIVE_PUBLIC_KEY}
     volumes:
       - api-prod-logs:/var/www/html/storage/logs
       - ./keys:/keys:ro
